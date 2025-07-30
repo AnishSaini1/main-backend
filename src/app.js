@@ -39,6 +39,7 @@ import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import publicKeyRouter from "./routes/publicKey.js"
+import errorHandler from "./middlewares/error.middleware.js";
 const app = express();
 
 // 👇 Dynamic CORS config for multiple frontend domains
@@ -71,4 +72,10 @@ app.use("/api/v1", publicKeyRouter);
 // route declaration
 app.use("/api/v1/users", userRouter); // http://localhost:8000/api/v1/users/register
 
+app.use(errorHandler);
 export { app };
+
+
+
+
+
