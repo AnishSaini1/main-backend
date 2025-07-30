@@ -38,42 +38,60 @@
 
 
 
-import { v2 as cloudinary } from "cloudinary";
-import fs from "fs";
+// import { v2 as cloudinary } from "cloudinary";
+// import fs from "fs";
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+// cloudinary.config({
+//   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+//   api_key: process.env.CLOUDINARY_API_KEY,
+//   api_secret: process.env.CLOUDINARY_API_SECRET,
+// });
 
-const uploadOnCloudinary = async (localFilePath) => {
-  try {
-    if (!localFilePath) return null;
+// const uploadOnCloudinary = async (localFilePath) => {
+//   try {
+//     if (!localFilePath) return null;
 
-    // Upload file to Cloudinary
-    const response = await cloudinary.uploader.upload(localFilePath, {
-      resource_type: "auto",
-    });
+//     // Upload file to Cloudinary
+//     const response = await cloudinary.uploader.upload(localFilePath, {
+//       resource_type: "auto",
+//     });
 
-    console.log("✅ File uploaded to Cloudinary:", response.url);
+//     console.log("✅ File uploaded to Cloudinary:", response.url);
 
-    // ✅ Only delete if file exists
-    if (fs.existsSync(localFilePath)) {
-      fs.unlinkSync(localFilePath);
-    }
+//     // ✅ Only delete if file exists
+//     if (fs.existsSync(localFilePath)) {
+//       fs.unlinkSync(localFilePath);
+//     }
 
-    return response;
-  } catch (error) {
-    console.error("❌ Cloudinary Upload Failed:", error.message);
+//     return response;
+//   } catch (error) {
+//     console.error("❌ Cloudinary Upload Failed:", error.message);
 
-    // ✅ Try to delete only if it exists
-    if (fs.existsSync(localFilePath)) {
-      fs.unlinkSync(localFilePath);
-    }
+//     // ✅ Try to delete only if it exists
+//     if (fs.existsSync(localFilePath)) {
+//       fs.unlinkSync(localFilePath);
+//     }
 
-    return null;
-  }
+//     return null;
+//   }
+// };
+
+// export { uploadOnCloudinary };
+
+
+
+const uploadOnCloudinary = (buffer) => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { resource_type: "auto" }, 
+      (error, result) => {
+        if (error) return reject(error);
+        resolve(result);
+      }
+    );
+
+    stream.end(buffer);
+  });
 };
 
 export { uploadOnCloudinary };

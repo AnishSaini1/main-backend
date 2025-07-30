@@ -38,7 +38,7 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-
+import publicKeyRouter from "./routes/publicKey.js"
 const app = express();
 
 // 👇 Dynamic CORS config for multiple frontend domains
@@ -67,6 +67,7 @@ app.use(cookieParser());
 // routes
 import userRouter from "./routes/user.routes.js";
 
+app.use("/api/v1", publicKeyRouter);
 // route declaration
 app.use("/api/v1/users", userRouter); // http://localhost:8000/api/v1/users/register
 

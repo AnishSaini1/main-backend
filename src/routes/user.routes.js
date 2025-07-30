@@ -9,6 +9,7 @@ import { loginUser } from "../controllers/user.controller.js";
 import { logoutUser } from "../controllers/user.controller.js";
 import { refreshAccessToken } from "../controllers/user.controller.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
+import { servePublicKey } from "../controllers/user.controller.js";
 
 
 const router = Router()
@@ -28,6 +29,7 @@ router.route("/register").post(
 
 router.route("/login").post(loginUser)
 
+router.route("/public-key").get(servePublicKey); // ✅ Serve RSA public key here
 
 //secured 
 router.route("/logout").post(verifyJWT,logoutUser)

@@ -5,6 +5,68 @@ import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
+// import { decryptAESKey, decryptDataAES } from "../utils/decrypt.js";
+import path from "path";
+import crypto from "crypto";
+import fs from "fs";
+import { log } from "console";
+
+const RSA_PRIVATE_KEY_PATH = path.resolve("keys/private.pem");
+const iv = Buffer.alloc(16, 0);
+
+
+//  function decryptAESKey(encryptedKeyBase64) {
+//   const privateKey = fs.readFileSync(RSA_PRIVATE_KEY_PATH, "utf8");
+//   const encryptedBuffer = Buffer.from(encryptedKeyBase64, "base64");
+//   // Output should be hex string!
+//   const decryptedHex = crypto.privateDecrypt(
+//     {
+//       key: privateKey,
+//       padding: crypto.constants.RSA_PKCS1_PADDING,
+//     },
+//     encryptedBuffer
+//   ).toString('utf8');  // because jsencrypt by default outputs utf8 string
+
+//   return Buffer.from(decryptedHex, 'hex');
+// }
+
+function decryptAESKey(encryptedKeyBase64) {
+  const privateKey = fs.readFileSync(RSA_PRIVATE_KEY_PATH, "utf8");
+  const encryptedBuffer = Buffer.from(encryptedKeyBase64, "base64");
+  console.log("encryptedBuffer length:", encryptedBuffer.length); // 256 for 2048-bit RSA
+  try {
+    const decryptedHex = crypto.privateDecrypt(
+      {
+        key: privateKey,
+        padding: crypto.constants.RSA_PKCS1_PADDING,
+      },
+      encryptedBuffer
+    ).toString('utf8');
+
+    console.log("decryptedHex (aes key hex):", decryptedHex);
+    return Buffer.from(decryptedHex, 'hex');
+  } catch (e) {
+    console.error("privateDecrypt error:", e);
+    throw e;
+  }
+}
+
+
+ function decryptDataAES(encryptedDataBase64, aesKeyBuffer) {
+  const encryptedData = Buffer.from(encryptedDataBase64, "base64");
+  const decipher = crypto.createDecipheriv(
+    "aes-256-cbc",
+    aesKeyBuffer,
+    iv
+  );
+  let decrypted = decipher.update(encryptedData, "base64", "utf8");
+  decrypted += decipher.final("utf8");
+
+  return JSON.parse(decrypted);
+}
+
+
+
 
 const generateAccessandRefreshTokens = async (userId) => {
   try {
@@ -42,57 +104,127 @@ const generateAccessandRefreshTokens = async (userId) => {
 //     }
 // };
 
-const registerUser = asyncHandler(async (req, res) => {
-  // get user details from frontend
-  //validation - non empty
-  //check if user already exist : username , email
-  // check for images ,check for avatar
-  //upload them to cloudinary , avatar
-  // create user object - create entry in db
-  // remove password and refresh token field from response
-  // check for user creation
-  //return response
+// const registerUser = asyncHandler(async (req, res) => {
+//   // get user details from frontend
+//   //validation - non empty
+//   //check if user already exist : username , email
+//   // check for images ,check for avatar
+//   //upload them to cloudinary , avatar
+//   // create user object - create entry in db
+//   // remove password and refresh token field from response
+//   // check for user creation
+//   //return response
 
+//   const { fullname, email, username, password } = req.body;
+
+//   console.log("Fields received:", { fullname, email, username, password });
+
+//   if (
+//     [fullname, email, password, username].some((fields) => fields.trim() === "")
+//   ) {
+//     throw new ApiError(400, "All fields are required");
+//   }
+
+//   const existedUser = await User.findOne({
+//     $or: [{ username }, { email }],
+//   });
+
+//   if (existedUser) {
+//     throw new ApiError(409, "User with email or Username Alresdy exist");
+//   }
+
+//   const avatarLocalPath = req.files?.avatar[0]?.path;
+//   //    const coverImageLocalPath = req.files?.coverImage[0]?.path;
+//   let coverImageLocalPath;
+//   if (
+//     req.files &&
+//     Array.isArray(req.files.coverImage) &&
+//     req.files.coverImage.length > 0
+//   ) {
+//     coverImageLocalPath = req.files.coverImage[0].path;
+//   }
+
+//   if (!avatarLocalPath) {
+//     throw new ApiError(400, "Avatar is required");
+//   }
+
+//   const avatar = await uploadOnCloudinary(avatarLocalPath);
+//   const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+
+//   if (!avatar) {
+//     throw new ApiError(400, "Avatar file is required");
+//   }
+
+//   const user = await User.create({
+//     fullname,
+//     avatar: avatar.url,
+//     coverImage: coverImage?.url || "",
+//     email,
+//     password,
+//     username: username.toLowerCase(),
+//   });
+
+//   const createdUser = await User.findById(user._id).select(
+//     "-password -refreshToken"
+//   );
+//   if (!createdUser) {
+//     throw new ApiError(500, "Something went wrong while registering the user ");
+//   }
+
+//   return res
+//     .status(201)
+//     .json(new ApiResponse(200, createdUser, "User Registered Successfully"));
+// });
+
+
+
+
+
+
+const registerUser = asyncHandler(async (req, res) => {
   const { fullname, email, username, password } = req.body;
 
   console.log("Fields received:", { fullname, email, username, password });
 
-  if (
-    [fullname, email, password, username].some((fields) => fields.trim() === "")
-  ) {
+  // Validate required fields
+  if ([fullname, email, password, username].some((field) => !field || field.trim() === "")) {
     throw new ApiError(400, "All fields are required");
   }
 
+  // Check if user already exists
   const existedUser = await User.findOne({
-    $or: [{ username }, { email }],
+    $or: [{ username: username.toLowerCase() }, { email }],
   });
 
   if (existedUser) {
-    throw new ApiError(409, "User with email or Username Alresdy exist");
+    throw new ApiError(409, "User with email or Username already exists");
   }
 
-  const avatarLocalPath = req.files?.avatar[0]?.path;
-  //    const coverImageLocalPath = req.files?.coverImage[0]?.path;
-  let coverImageLocalPath;
+  // Get avatar buffer from multer memoryStorage
+  const avatarBuffer = req.files?.avatar?.[0]?.buffer;
+  if (!avatarBuffer) {
+    throw new ApiError(400, "Avatar is required");
+  }
+
+  // Optional cover image buffer
+  let coverImageBuffer = null;
   if (
     req.files &&
     Array.isArray(req.files.coverImage) &&
     req.files.coverImage.length > 0
   ) {
-    coverImageLocalPath = req.files.coverImage[0].path;
+    coverImageBuffer = req.files.coverImage[0].buffer;
   }
 
-  if (!avatarLocalPath) {
-    throw new ApiError(400, "Avatar is required");
+  // Upload images to Cloudinary
+  const avatar = await uploadOnCloudinary(avatarBuffer);
+  const coverImage = coverImageBuffer ? await uploadOnCloudinary(coverImageBuffer) : null;
+
+  if (!avatar?.url) {
+    throw new ApiError(400, "Avatar upload failed");
   }
 
-  const avatar = await uploadOnCloudinary(avatarLocalPath);
-  const coverImage = await uploadOnCloudinary(coverImageLocalPath);
-
-  if (!avatar) {
-    throw new ApiError(400, "Avatar file is required");
-  }
-
+  // Create user in DB
   const user = await User.create({
     fullname,
     avatar: avatar.url,
@@ -102,75 +234,143 @@ const registerUser = asyncHandler(async (req, res) => {
     username: username.toLowerCase(),
   });
 
-  const createdUser = await User.findById(user._id).select(
-    "-password -refreshToken"
-  );
+  // Retrieve user excluding sensitive fields
+  const createdUser = await User.findById(user._id).select("-password -refreshToken");
   if (!createdUser) {
-    throw new ApiError(500, "Something went wrong while registering the user ");
+    throw new ApiError(500, "Something went wrong while registering the user");
   }
 
+  // Send response
   return res
     .status(201)
-    .json(new ApiResponse(200, createdUser, "User Registered Successfully"));
+    .json({
+      success: true,
+      data: createdUser,
+      message: "User Registered Successfully",
+    });
 });
 
-const loginUser = asyncHandler(async (req, res) => {
-  //req body -> data
-  //username or email
-  //find the user
-  //password check
-  //access and refresh token
-  // send cookies
 
-  const { email, username, password } = req.body;
-  //  if (!username || !email)
-  if (!(username || email)) {
-    throw new ApiError(400, "Username or email is required");
-  }
-        //  console.log(user, "login user");
+
+
+
+
+
+
+
+
+
+// const loginUser = asyncHandler(async (req, res) => {
+//   //req body -> data
+//   //username or email
+//   //find the user
+//   //password check
+//   //access and refresh token
+//   // send cookies
+
+//   const { email, username, password } = req.body;
+//   //  if (!username || !email)
+//   if (!(username || email)) {
+//     throw new ApiError(400, "Username or email is required");
+//   }
+//         //  console.log(user, "login user");
          
-  const user = await User.findOne({
-    $or: [{ username }, { email }],
-  }).select("+password");
+//   const user = await User.findOne({
+//     $or: [{ username }, { email }],
+//   }).select("+password");
 
-  if (!user) {
-    throw new ApiError(404, "User does not exist");
+//   if (!user) {
+//     throw new ApiError(404, "User does not exist");
+//   }
+
+//   const isPasswordValid = await user.isPasswordCorrect(password);
+//   if (!isPasswordValid) {
+//     throw new ApiError(404, "Invalid user Credentials");
+//   }
+
+//   const { accessToken, refreshToken } = await generateAccessandRefreshTokens(
+//     user._id
+//   );
+
+//   const loggedInUser = await User.findById(user._id).select(
+//     "-password -refreshToken"
+//   );
+
+//   const options = {
+//     httpOnly: true,
+//     secure: true,
+//     sameSite: "None",
+//   };
+//   return res
+//     .status(200)
+//     .cookie("accessToken", accessToken, options)
+//     .cookie("refreshToken", refreshToken, options)
+//     .json(
+//       new ApiResponse(
+//         200,
+//         {
+//           user: loggedInUser,
+//           accessToken,
+//           refreshToken,
+//         },
+//         "User logged in successfully"
+//       )
+//     );
+// });
+
+
+
+
+ const loginUser = asyncHandler(async (req, res) => {
+  const { encryptedKey, encryptedData } = req.body;
+console.log('LOGIN POST received. Body:', req.body);
+  if (!encryptedKey || !encryptedData) {
+      console.error("Missing encryptedKey/encryptedData!", req.body);
+    throw new ApiError(400, 'Encrypted data missing');
   }
 
-  const isPasswordValid = await user.isPasswordCorrect(password);
-  if (!isPasswordValid) {
-    throw new ApiError(404, "Invalid user Credentials");
-  }
+  const aesKey = decryptAESKey(encryptedKey);
+  const { email, password } = decryptDataAES(encryptedData, aesKey);
 
-  const { accessToken, refreshToken } = await generateAccessandRefreshTokens(
-    user._id
-  );
+  const user = await User.findOne({ email }).select('+password');
+  if (!user) throw new ApiError(404, 'User not found');
 
-  const loggedInUser = await User.findById(user._id).select(
-    "-password -refreshToken"
-  );
+  const isMatch = await user.isPasswordCorrect(password);
+  if (!isMatch) throw new ApiError(401, 'Invalid credentials');
 
-  const options = {
-    httpOnly: true,
-    secure: true,
-    sameSite: "None",
-  };
-  return res
+  const { accessToken, refreshToken } = await generateAccessandRefreshTokens(user._id);
+
+  res
     .status(200)
-    .cookie("accessToken", accessToken, options)
-    .cookie("refreshToken", refreshToken, options)
+    .cookie("accessToken", accessToken, { httpOnly: true, secure: true, sameSite: "None" })
+    .cookie("refreshToken", refreshToken, { httpOnly: true, secure: true, sameSite: "None" })
     .json(
       new ApiResponse(
         200,
         {
-          user: loggedInUser,
+          user: {
+            _id: user._id,
+            email: user.email,
+            username: user.username,
+            fullname: user.fullname,
+          },
           accessToken,
           refreshToken,
         },
-        "User logged in successfully"
+        "Login successful"
       )
     );
 });
+
+const servePublicKey = asyncHandler(async (req, res) => {
+  const publicKey = fs.readFileSync(RSA_PUBLIC_KEY_PATH, "utf8");
+  console.log(publicKey, "publickey");
+  
+  res.status(200).json({ publicKey });
+});
+
+
+
 
 const logoutUser = asyncHandler(async (req, res) => {
   await User.findByIdAndUpdate(
@@ -495,4 +695,5 @@ export {
   updateUserCoverImage,
   getUserChannelProfile,
   getWatchHistory,
+  servePublicKey
 };
