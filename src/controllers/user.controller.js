@@ -127,10 +127,11 @@ const loginUser = asyncHandler(async (req, res) => {
   if (!(username || email)) {
     throw new ApiError(400, "Username or email is required");
   }
-
+        //  console.log(user, "login user");
+         
   const user = await User.findOne({
     $or: [{ username }, { email }],
-  });
+  }).select("+password");
 
   if (!user) {
     throw new ApiError(404, "User does not exist");
@@ -245,7 +246,13 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 const changeCurretPassword = asyncHandler(async (req, res) => {
   const { oldPassword, newPassword } = req.body;
 
-  const user = await User.findById(req?.body?._id);
+//   console.log("User in request:", req.user);
+//   const user = await User.findById(req?.body?._id).select("+password");
+
+const user = await User.findById(req.user._id).select("+password");
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
   const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
 
   if (!isPasswordCorrect) {
@@ -261,9 +268,15 @@ const changeCurretPassword = asyncHandler(async (req, res) => {
 });
 
 const getCurrentUser = asyncHandler(async (req, res) => {
-  return res
-    .status(200)
-    .json(200, req.user, "Current user fetched Successfully");
+//   return res
+//     .status(200)
+//     .json(200, req.user, "Current user fetched Successfully");
+
+return res.status(200).json({
+  statusCode: 200,
+  data: req.user,
+  message: "Current user fetched successfully"
+});
 });
 
 const updateAccountDetails = asyncHandler(async (req, res) => {
