@@ -10,6 +10,7 @@ import { logoutUser } from "../controllers/user.controller.js";
 import { refreshAccessToken } from "../controllers/user.controller.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 import { servePublicKey } from "../controllers/user.controller.js";
+import { decryptBody } from "../middlewares/encryptDecrypt.middleware.js";
 
 
 const router = Router()
@@ -27,7 +28,10 @@ router.route("/register").post(
     ]),
     registerUser)
 
-router.route("/login").post(loginUser)
+// router.route("/login").post(loginUser)
+router.post('/login', decryptBody, loginUser);
+
+
 
 router.route("/public-key").get(servePublicKey); // ✅ Serve RSA public key here
 
@@ -36,9 +40,13 @@ router.route("/logout").post(verifyJWT,logoutUser)
 router.route("/refresh-token").post(refreshAccessToken)
 
 
-router.route("/change-password").post(verifyJWT,changeCurretPassword)
+// router.route("/change-password").post(verifyJWT,changeCurretPassword)
+
+router.post("/change-password", verifyJWT, decryptBody, changeCurretPassword);
 router.route("/current-user").get(verifyJWT,getCurrentUser)
-router.route("/update-account").patch(verifyJWT,updateAccountDetails)
+// router.route("/update-account").patch(verifyJWT,updateAccountDetails)
+
+router.patch("/update-account", verifyJWT, decryptBody, updateAccountDetails);
 router.route("/avatar").patch(verifyJWT, upload.single("avatar"), updateUserAvatar)
 router.route("/cover-image").patch(verifyJWT, upload.single("coverImage"), updateUserCoverImage)
 router.route("/c/:username").get(verifyJWT,getUserChannelProfile)

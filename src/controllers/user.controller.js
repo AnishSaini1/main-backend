@@ -5,14 +5,14 @@ import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
-// import { decryptAESKey, decryptDataAES } from "../utils/decrypt.js";
-import path from "path";
-import crypto from "crypto";
-import fs from "fs";
-import { log } from "console";
+import { decryptAESKey, decryptDataAES } from "../utils/decrypt.js";
+// import path from "path";
+// import crypto from "crypto";
+// import fs from "fs";
+// import { log } from "console";
 
-const RSA_PRIVATE_KEY_PATH = path.resolve("keys/private.pem");
-const iv = Buffer.alloc(16, 0);
+// const RSA_PRIVATE_KEY_PATH = path.resolve("keys/private.pem");
+// const iv = Buffer.alloc(16, 0);
 
 
 //  function decryptAESKey(encryptedKeyBase64) {
@@ -30,40 +30,40 @@ const iv = Buffer.alloc(16, 0);
 //   return Buffer.from(decryptedHex, 'hex');
 // }
 
-function decryptAESKey(encryptedKeyBase64) {
-  const privateKey = fs.readFileSync(RSA_PRIVATE_KEY_PATH, "utf8");
-  const encryptedBuffer = Buffer.from(encryptedKeyBase64, "base64");
-  console.log("encryptedBuffer length:", encryptedBuffer.length); // 256 for 2048-bit RSA
-  try {
-    const decryptedHex = crypto.privateDecrypt(
-      {
-        key: privateKey,
-        padding: crypto.constants.RSA_PKCS1_PADDING,
-      },
-      encryptedBuffer
-    ).toString('utf8');
+// function decryptAESKey(encryptedKeyBase64) {
+//   const privateKey = fs.readFileSync(RSA_PRIVATE_KEY_PATH, "utf8");
+//   const encryptedBuffer = Buffer.from(encryptedKeyBase64, "base64");
+//   console.log("encryptedBuffer length:", encryptedBuffer.length); // 256 for 2048-bit RSA
+//   try {
+//     const decryptedHex = crypto.privateDecrypt(
+//       {
+//         key: privateKey,
+//         padding: crypto.constants.RSA_PKCS1_PADDING,
+//       },
+//       encryptedBuffer
+//     ).toString('utf8');
 
-    console.log("decryptedHex (aes key hex):", decryptedHex);
-    return Buffer.from(decryptedHex, 'hex');
-  } catch (e) {
-    console.error("privateDecrypt error:", e);
-    throw e;
-  }
-}
+//     console.log("decryptedHex (aes key hex):", decryptedHex);
+//     return Buffer.from(decryptedHex, 'hex');
+//   } catch (e) {
+//     console.error("privateDecrypt error:", e);
+//     throw e;
+//   }
+// }
 
 
- function decryptDataAES(encryptedDataBase64, aesKeyBuffer) {
-  const encryptedData = Buffer.from(encryptedDataBase64, "base64");
-  const decipher = crypto.createDecipheriv(
-    "aes-256-cbc",
-    aesKeyBuffer,
-    iv
-  );
-  let decrypted = decipher.update(encryptedData, "base64", "utf8");
-  decrypted += decipher.final("utf8");
+//  function decryptDataAES(encryptedDataBase64, aesKeyBuffer) {
+//   const encryptedData = Buffer.from(encryptedDataBase64, "base64");
+//   const decipher = crypto.createDecipheriv(
+//     "aes-256-cbc",
+//     aesKeyBuffer,
+//     iv
+//   );
+//   let decrypted = decipher.update(encryptedData, "base64", "utf8");
+//   decrypted += decipher.final("utf8");
 
-  return JSON.parse(decrypted);
-}
+//   return JSON.parse(decrypted);
+// }
 
 
 
@@ -322,21 +322,17 @@ const registerUser = asyncHandler(async (req, res) => {
 
 
  const loginUser = asyncHandler(async (req, res) => {
-  const { encryptedKey, encryptedData } = req.body;
-console.log('LOGIN POST received. Body:', req.body);
-  if (!encryptedKey || !encryptedData) {
-      console.error("Missing encryptedKey/encryptedData!", req.body);
-    throw new ApiError(400, 'Encrypted data missing');
-  }
+  const { email, password } = req.body; // decrypted by middleware
 
-  const aesKey = decryptAESKey(encryptedKey);
-  const { email, password } = decryptDataAES(encryptedData, aesKey);
+  if (!email || !password) {
+    throw new ApiError(400, 'Email and password are required');
+  }
 
   const user = await User.findOne({ email }).select('+password');
   if (!user) throw new ApiError(404, 'User not found');
 
   const isMatch = await user.isPasswordCorrect(password);
-  if (!isMatch) throw new ApiError(401, 'Invalid credentials');
+  if (!isMatch) throw new ApiError(401, 'Invalid credentials')
 
   const { accessToken, refreshToken } = await generateAccessandRefreshTokens(user._id);
 
@@ -353,6 +349,7 @@ console.log('LOGIN POST received. Body:', req.body);
             email: user.email,
             username: user.username,
             fullname: user.fullname,
+            avatar : user.avatar
           },
           accessToken,
           refreshToken,
@@ -446,29 +443,52 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
   }
 });
 
+// const changeCurretPassword = asyncHandler(async (req, res) => {
+//   const { oldPassword, newPassword } = req.body;
+
+// //   console.log("User in request:", req.user);
+// //   const user = await User.findById(req?.body?._id).select("+password");
+
+// const user = await User.findById(req.user._id).select("+password");
+//   if (!user) {
+//     throw new ApiError(404, "User not found");
+//   }
+//   const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
+
+//   if (!isPasswordCorrect) {
+//     throw new ApiError(401, "Invalid old password");
+//   }
+
+//   user.password = newPassword;
+//   await user.save({ validateBeforeSave: false });
+
+//   return res
+//     .status(200)
+//     .json(new ApiResponse(200, {}, "Password Changed successfuly"));
+// });
+
+
 const changeCurretPassword = asyncHandler(async (req, res) => {
-  const { oldPassword, newPassword } = req.body;
+  let { oldPassword, newPassword } = req.body;
 
-//   console.log("User in request:", req.user);
-//   const user = await User.findById(req?.body?._id).select("+password");
-
-const user = await User.findById(req.user._id).select("+password");
-  if (!user) {
-    throw new ApiError(404, "User not found");
+  // If encrypted payload (for backwards compatibility, otherwise force encrypted)
+  if (req.body.encryptedKey && req.body.encryptedData) {
+    const aesKey = decryptAESKey(req.body.encryptedKey);
+    ({ oldPassword, newPassword } = decryptDataAES(req.body.encryptedData, aesKey));
   }
+
+  const user = await User.findById(req.user._id).select("+password");
+  if (!user) throw new ApiError(404, "User not found");
+
   const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
-
-  if (!isPasswordCorrect) {
-    throw new ApiError(401, "Invalid old password");
-  }
+  if (!isPasswordCorrect) throw new ApiError(401, "Invalid old password");
 
   user.password = newPassword;
   await user.save({ validateBeforeSave: false });
 
-  return res
-    .status(200)
-    .json(new ApiResponse(200, {}, "Password Changed successfuly"));
+  return res.status(200).json(new ApiResponse(200, {}, "Password Changed successfully"));
 });
+
 
 const getCurrentUser = asyncHandler(async (req, res) => {
 //   return res
@@ -482,29 +502,54 @@ return res.status(200).json({
 });
 });
 
+// const updateAccountDetails = asyncHandler(async (req, res) => {
+//   const { fullname, email } = req.body;
+
+//   if (!fullname || !email) {
+//     throw new ApiError(400, "Both field are Required ");
+//   }
+
+//   const user = await User.findByIdAndUpdate(
+//     req.user?._id,
+//     {
+//       $set: {
+//         fullname,
+//         email: email,
+//       },
+//     },
+//     {
+//       new: true,
+//     }
+//   ).select("-password");
+
+//   return res
+//     .status(200)
+//     .json(new ApiResponse(200, user, "Account detail updated Successfully"));
+// });
+
 const updateAccountDetails = asyncHandler(async (req, res) => {
-  const { fullname, email } = req.body;
+  let { fullname, email } = req.body;
+  //       console.log(req.body, "update ed data");
+        
+  // if (req.body.encryptedKey && req.body.encryptedData) {
+  //        console.log(req.body.encryptedData, "encrypted data");
+
+         
+  //   const aesKey = decryptAESKey(req.body.encryptedKey);
+  //   ({ fullname, email } = decryptDataAES(req.body.encryptedData, aesKey));
+  // }
 
   if (!fullname || !email) {
-    throw new ApiError(400, "Both field are Required ");
+    throw new ApiError(400, "Both fields are Required");
   }
 
   const user = await User.findByIdAndUpdate(
     req.user?._id,
-    {
-      $set: {
-        fullname,
-        email: email,
-      },
-    },
-    {
-      new: true,
-    }
+    { $set: { fullname, email } },
+    { new: true }
   ).select("-password");
 
-  return res
-    .status(200)
-    .json(new ApiResponse(200, user, "Account detail updated Successfully"));
+  return res.status(200).json(new ApiResponse(200, user, "Account details updated successfully"));
 });
 
 const updateUserAvatar = asyncHandler(async (req, res) => {
